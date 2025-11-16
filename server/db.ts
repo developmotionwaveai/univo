@@ -1,18 +1,23 @@
-import { drizzle } from "drizzle-orm/node-postgres";
-import { Pool } from "pg";
-import * as schema from "@shared/schema";
+import { createClient } from "@supabase/supabase-js";
+import type { Database } from "@shared/schema";
 
-if (!process.env.DATABASE_URL) {
+if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
   throw new Error(
-    "DATABASE_URL must be set. Did you forget to provision a database?",
+    "SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY must be set in .env",
   );
 }
 
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: {
-    rejectUnauthorized: false // Supabase direct connection requires SSL
+// Create a Supabase client with service role key (for server-side operations)
+export const supabase = createClient<Database>(
+  process.env.SUPABASE_URL,
+  process.env.SUPABASE_SERVICE_ROLE_KEY,
+  {
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false,
+    },
   }
-});
+);
 
-export const db = drizzle(pool, { schema });
+// Export a simple database interface for compatibility
+export const db = supabase.from as any;

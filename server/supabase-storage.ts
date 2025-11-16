@@ -3,6 +3,12 @@ import type { IStorage } from "./storage";
 import type {
   User,
   InsertUser,
+  Club,
+  InsertClub,
+  ClubMember,
+  InsertClubMember,
+  ClubApplication,
+  InsertClubApplication,
   Member,
   InsertMember,
   FormTemplate,
@@ -21,6 +27,10 @@ import type {
   InsertCampaign,
   Donation,
   InsertDonation,
+  ClubDues,
+  InsertClubDues,
+  DuesPayment,
+  InsertDuesPayment,
 } from "@shared/schema";
 
 const supabase = createClient(
@@ -47,6 +57,148 @@ export class SupabaseStorage implements IStorage {
 
   async createUser(insertUser: InsertUser): Promise<User> {
     const { data, error } = await supabase.from('users').insert(insertUser).select().single();
+    if (error) throw error;
+    return data;
+  }
+
+  // Clubs
+  async getAllClubs(): Promise<Club[]> {
+    const { data } = await supabase.from('clubs').select('*');
+    return data || [];
+  }
+
+  async getClub(id: string): Promise<Club | undefined> {
+    const { data } = await supabase.from('clubs').select('*').eq('id', id).single();
+    return data || undefined;
+  }
+
+  async createClub(insertClub: InsertClub): Promise<Club> {
+    const { data, error } = await supabase.from('clubs').insert(insertClub).select().single();
+    if (error) throw error;
+    return data;
+  }
+
+  async updateClub(id: string, updates: Partial<Club>): Promise<Club> {
+    const { data, error } = await supabase.from('clubs').update(updates).eq('id', id).select().single();
+    if (error) throw error;
+    return data;
+  }
+
+  async deleteClub(id: string): Promise<void> {
+    await supabase.from('clubs').delete().eq('id', id);
+  }
+
+  // Club Members
+  async getClubMembers(clubId: string): Promise<ClubMember[]> {
+    const { data } = await supabase.from('club_members').select('*').eq('club_id', clubId);
+    return data || [];
+  }
+
+  async getUserClubs(userId: string): Promise<Club[]> {
+    const { data: clubMembers } = await supabase.from('club_members').select('club_id').eq('user_id', userId);
+    if (!clubMembers) return [];
+    const clubIds = clubMembers.map(m => m.club_id);
+    if (clubIds.length === 0) return [];
+    const { data: clubs } = await supabase.from('clubs').select('*').in('id', clubIds);
+    return clubs || [];
+  }
+
+  async getUserClubRoles(userId: string): Promise<ClubMember[]> {
+    const { data } = await supabase.from('club_members').select('*').eq('user_id', userId);
+    return data || [];
+  }
+
+  async getClubMember(clubId: string, userId: string): Promise<ClubMember | undefined> {
+    const { data } = await supabase.from('club_members').select('*').eq('club_id', clubId).eq('user_id', userId).single();
+    return data || undefined;
+  }
+
+  async addClubMember(insertMember: InsertClubMember): Promise<ClubMember> {
+    const { data, error } = await supabase.from('club_members').insert(insertMember).select().single();
+    if (error) throw error;
+    return data;
+  }
+
+  async updateClubMember(id: string, updates: Partial<ClubMember>): Promise<ClubMember> {
+    const { data, error } = await supabase.from('club_members').update(updates).eq('id', id).select().single();
+    if (error) throw error;
+    return data;
+  }
+
+  async removeClubMember(id: string): Promise<void> {
+    await supabase.from('club_members').delete().eq('id', id);
+  }
+
+  // Club Applications
+  async getClubApplications(clubId: string): Promise<ClubApplication[]> {
+    const { data } = await supabase.from('club_applications').select('*').eq('club_id', clubId);
+    return data || [];
+  }
+
+  async getUserApplications(userId: string): Promise<ClubApplication[]> {
+    const { data } = await supabase.from('club_applications').select('*').eq('user_id', userId);
+    return data || [];
+  }
+
+  async getClubApplication(id: string): Promise<ClubApplication | undefined> {
+    const { data } = await supabase.from('club_applications').select('*').eq('id', id).single();
+    return data || undefined;
+  }
+
+  async createClubApplication(insertApp: InsertClubApplication): Promise<ClubApplication> {
+    const { data, error } = await supabase.from('club_applications').insert(insertApp).select().single();
+    if (error) throw error;
+    return data;
+  }
+
+  async updateClubApplication(id: string, updates: Partial<ClubApplication>): Promise<ClubApplication> {
+    const { data, error } = await supabase.from('club_applications').update(updates).eq('id', id).select().single();
+    if (error) throw error;
+    return data;
+  }
+
+  // Club Dues
+  async getClubDues(clubId: string): Promise<ClubDues[]> {
+    const { data } = await supabase.from('club_dues').select('*').eq('club_id', clubId);
+    return data || [];
+  }
+
+  async getActiveDues(clubId: string): Promise<ClubDues[]> {
+    const { data } = await supabase.from('club_dues').select('*').eq('club_id', clubId).eq('is_active', true);
+    return data || [];
+  }
+
+  async createClubDues(insertDues: InsertClubDues): Promise<ClubDues> {
+    const { data, error } = await supabase.from('club_dues').insert(insertDues).select().single();
+    if (error) throw error;
+    return data;
+  }
+
+  async updateClubDues(id: string, updates: Partial<ClubDues>): Promise<ClubDues> {
+    const { data, error } = await supabase.from('club_dues').update(updates).eq('id', id).select().single();
+    if (error) throw error;
+    return data;
+  }
+
+  // Dues Payments
+  async getUserDuesPayments(userId: string): Promise<DuesPayment[]> {
+    const { data } = await supabase.from('dues_payments').select('*').eq('user_id', userId);
+    return data || [];
+  }
+
+  async getDuesPayments(duesId: string): Promise<DuesPayment[]> {
+    const { data } = await supabase.from('dues_payments').select('*').eq('dues_id', duesId);
+    return data || [];
+  }
+
+  async createDuesPayment(insertPayment: InsertDuesPayment): Promise<DuesPayment> {
+    const { data, error } = await supabase.from('dues_payments').insert(insertPayment).select().single();
+    if (error) throw error;
+    return data;
+  }
+
+  async updateDuesPayment(id: string, updates: Partial<DuesPayment>): Promise<DuesPayment> {
+    const { data, error } = await supabase.from('dues_payments').update(updates).eq('id', id).select().single();
     if (error) throw error;
     return data;
   }
@@ -135,6 +287,11 @@ export class SupabaseStorage implements IStorage {
     return data || undefined;
   }
 
+  async getClubEvents(clubId: string): Promise<Event[]> {
+    const { data } = await supabase.from('events').select('*').eq('club_id', clubId);
+    return data || [];
+  }
+
   async createEvent(insertEvent: InsertEvent): Promise<Event> {
     const { data, error } = await supabase.from('events').insert(insertEvent).select().single();
     if (error) throw error;
@@ -185,6 +342,11 @@ export class SupabaseStorage implements IStorage {
     return data || undefined;
   }
 
+  async getClubAnnouncements(clubId: string): Promise<Announcement[]> {
+    const { data } = await supabase.from('announcements').select('*').eq('club_id', clubId);
+    return data || [];
+  }
+
   async createAnnouncement(insertAnnouncement: InsertAnnouncement): Promise<Announcement> {
     const { data, error } = await supabase.from('announcements').insert(insertAnnouncement).select().single();
     if (error) throw error;
@@ -227,6 +389,11 @@ export class SupabaseStorage implements IStorage {
   async getCampaign(id: string): Promise<Campaign | undefined> {
     const { data } = await supabase.from('campaigns').select('*').eq('id', id).single();
     return data || undefined;
+  }
+
+  async getClubCampaigns(clubId: string): Promise<Campaign[]> {
+    const { data } = await supabase.from('campaigns').select('*').eq('club_id', clubId);
+    return data || [];
   }
 
   async createCampaign(insertCampaign: InsertCampaign): Promise<Campaign> {

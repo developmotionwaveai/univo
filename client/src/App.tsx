@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { Switch, Route, Redirect } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
@@ -28,11 +29,68 @@ import Announcements from "@/pages/announcements";
 import AnnouncementCreate from "@/pages/announcement-create";
 import Notifications from "@/pages/notifications";
 import NotFound from "@/pages/not-found";
+import Discover from "@/pages/discover";
+import ClubDetail from "@/pages/club-detail";
+import MyClubs from "@/pages/my-clubs";
+import MyEvents from "@/pages/my-events";
+import MyApplications from "@/pages/my-applications";
+import MyPayments from "@/pages/my-payments";
+import ClubDashboard from "@/pages/club-dashboard";
+import ManageMembers from "@/pages/manage-members";
+import ManageApplications from "@/pages/manage-applications";
+import ManageDues from "@/pages/manage-dues";
+import Profile from "@/pages/profile";
+import CreateEvent from "@/pages/create-event";
+import CreateAnnouncement from "@/pages/create-announcement";
+import EventRSVP from "@/pages/event-rsvp";
+import PaymentHistory from "@/pages/payment-history";
 import { Link } from "wouter";
 import { Badge } from "@/components/ui/badge";
 
 function ProtectedRoute({ component: Component }: { component: () => JSX.Element }) {
-  const { user } = useAuth();
+  const { user, setUser, logout } = useAuth();
+  const [isValidating, setIsValidating] = useState(true);
+
+  useEffect(() => {
+    // Validate session on mount
+    const validateSession = async () => {
+      if (!user) {
+        setIsValidating(false);
+        return;
+      }
+
+      try {
+        const response = await fetch("/api/auth/me", {
+          credentials: "include",
+        });
+
+        if (!response.ok) {
+          // Session is invalid, clear user
+          logout();
+        } else {
+          const userData = await response.json();
+          setUser(userData);
+        }
+      } catch (error) {
+        // Session validation failed
+        logout();
+      } finally {
+        setIsValidating(false);
+      }
+    };
+
+    validateSession();
+  }, []);
+
+  if (isValidating) {
+    return (
+      <div className="flex items-center justify-center h-screen">
+        <div className="text-lg" style={{ color: "var(--gray-11)" }}>
+          Loading...
+        </div>
+      </div>
+    );
+  }
 
   if (!user) {
     return <Redirect to="/login" />;
@@ -107,6 +165,162 @@ function Router() {
             component={() => (
               <DashboardLayout>
                 <Dashboard />
+              </DashboardLayout>
+            )}
+          />
+        )}
+      </Route>
+
+      <Route path="/discover">
+        {() => (
+          <ProtectedRoute
+            component={() => (
+              <DashboardLayout>
+                <Discover />
+              </DashboardLayout>
+            )}
+          />
+        )}
+      </Route>
+
+      <Route path="/club/:id">
+        {() => (
+          <ProtectedRoute
+            component={() => (
+              <DashboardLayout>
+                <ClubDetail />
+              </DashboardLayout>
+            )}
+          />
+        )}
+      </Route>
+
+      <Route path="/my-clubs">
+        {() => (
+          <ProtectedRoute
+            component={() => (
+              <DashboardLayout>
+                <MyClubs />
+              </DashboardLayout>
+            )}
+          />
+        )}
+      </Route>
+
+      <Route path="/my-events">
+        {() => (
+          <ProtectedRoute
+            component={() => (
+              <DashboardLayout>
+                <MyEvents />
+              </DashboardLayout>
+            )}
+          />
+        )}
+      </Route>
+
+      <Route path="/my-applications">
+        {() => (
+          <ProtectedRoute
+            component={() => (
+              <DashboardLayout>
+                <MyApplications />
+              </DashboardLayout>
+            )}
+          />
+        )}
+      </Route>
+
+      <Route path="/my-payments">
+        {() => (
+          <ProtectedRoute
+            component={() => (
+              <DashboardLayout>
+                <PaymentHistory />
+              </DashboardLayout>
+            )}
+          />
+        )}
+      </Route>
+
+      <Route path="/events/:id/rsvp">
+        {() => (
+          <ProtectedRoute
+            component={() => (
+              <DashboardLayout>
+                <EventRSVP />
+              </DashboardLayout>
+            )}
+          />
+        )}
+      </Route>
+
+      <Route path="/club/:id/dashboard">
+        {() => (
+          <ProtectedRoute
+            component={() => (
+              <DashboardLayout>
+                <ClubDashboard />
+              </DashboardLayout>
+            )}
+          />
+        )}
+      </Route>
+
+      <Route path="/club/:id/manage-members">
+        {() => (
+          <ProtectedRoute
+            component={() => (
+              <DashboardLayout>
+                <ManageMembers />
+              </DashboardLayout>
+            )}
+          />
+        )}
+      </Route>
+
+      <Route path="/club/:id/manage-applications">
+        {() => (
+          <ProtectedRoute
+            component={() => (
+              <DashboardLayout>
+                <ManageApplications />
+              </DashboardLayout>
+            )}
+          />
+        )}
+      </Route>
+
+      <Route path="/club/:id/manage-dues">
+        {() => (
+          <ProtectedRoute
+            component={() => (
+              <DashboardLayout>
+                <ManageDues />
+              </DashboardLayout>
+            )}
+          />
+        )}
+      </Route>
+
+      <Route path="/club/:id/create-event">
+        {() => (
+          <ProtectedRoute
+            component={() => (
+              <DashboardLayout>
+                <CreateEvent />
+              </DashboardLayout>
+            )}
+          />
+        )}
+      </Route>
+
+      <Route path="/club/:id/create-announcement">
+        {() => (
+          <ProtectedRoute
+            component={() => (
+              <DashboardLayout>
+                <CreateAnnouncement />
               </DashboardLayout>
             )}
           />
@@ -223,6 +437,18 @@ function Router() {
             component={() => (
               <DashboardLayout>
                 <Notifications />
+              </DashboardLayout>
+            )}
+          />
+        )}
+      </Route>
+
+      <Route path="/profile">
+        {() => (
+          <ProtectedRoute
+            component={() => (
+              <DashboardLayout>
+                <Profile />
               </DashboardLayout>
             )}
           />

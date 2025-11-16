@@ -11,6 +11,10 @@ import {
   Bell,
   MessageSquare,
   Settings,
+  Compass,
+  GripVertical,
+  ChevronRight,
+  CheckSquare,
 } from "lucide-react";
 import {
   Sidebar,
@@ -25,42 +29,84 @@ import {
   SidebarFooter,
 } from "@/components/ui/sidebar";
 import { Link, useLocation } from "wouter";
+import { useAuth } from "@/lib/auth";
+import { useQuery } from "@tanstack/react-query";
+import { Club, ClubMember } from "@shared/schema";
 
-const navigation = [
+const personalNavigation = [
   {
-    group: "General",
+    group: "Personal",
     items: [
-      { title: "Dashboard", url: "/dashboard", icon: Home },
-      { title: "Members", url: "/members", icon: Users },
-      { title: "Applications", url: "/applications", icon: FileText },
-    ],
-  },
-  {
-    group: "Events",
-    items: [
-      { title: "All Events", url: "/events", icon: Calendar },
-      { title: "Create Event", url: "/events/create", icon: Plus },
-    ],
-  },
-  {
-    group: "Fundraising",
-    items: [
-      { title: "Campaigns", url: "/campaigns", icon: TrendingUp },
-      { title: "Create Campaign", url: "/campaigns/create", icon: DollarSign },
-    ],
-  },
-  {
-    group: "Announcements",
-    items: [
-      { title: "All Announcements", url: "/announcements", icon: MessageSquare },
-      { title: "Create Announcement", url: "/announcements/create", icon: Plus },
+      { title: "Home", url: "/dashboard", icon: Home },
+      { title: "Discover Clubs", url: "/discover", icon: Compass },
+      { title: "My Clubs", url: "/my-clubs", icon: Users },
+      { title: "My Applications", url: "/my-applications", icon: CheckSquare },
+      { title: "My Events", url: "/my-events", icon: Calendar },
+      { title: "My Payments", url: "/my-payments", icon: DollarSign },
       { title: "Notifications", url: "/notifications", icon: Bell },
     ],
   },
 ];
 
+function ClubNavigation({ clubs }: { clubs: Club[] }) {
+  const [location] = useLocation();
+
+  if (clubs.length === 0) {
+    return null;
+  }
+
+  return (
+    <SidebarGroup>
+      <SidebarGroupLabel className="px-3 py-2 fui-r-size-1 fui-r-weight-semi-bold" style={{ color: 'var(--gray-11)' }}>
+        Your Clubs
+      </SidebarGroupLabel>
+      <SidebarGroupContent>
+        <SidebarMenu>
+          {clubs.map((club) => {
+            const clubDashboardUrl = `/club/${club.id}`;
+            const isActive = location.startsWith(`/club/${club.id}`);
+            
+            return (
+              <SidebarMenuItem key={club.id}>
+                <SidebarMenuButton
+                  asChild
+                  data-active={isActive}
+                  className="hover-elevate active-elevate-2"
+                >
+                  <Link href={clubDashboardUrl}>
+                    <a className="flex items-center gap-3 px-3 py-2.5 rounded-xl w-full" data-testid={`link-club-${club.id}`}>
+                      <div className="h-4 w-4 rounded bg-accent" style={{ backgroundColor: 'var(--accent-9)' }} />
+                      <span className="fui-r-size-2 flex-1 truncate" style={{ color: isActive ? 'var(--gray-12)' : 'var(--gray-11)' }}>
+                        {club.name}
+                      </span>
+                      {isActive && <ChevronRight className="h-4 w-4" style={{ color: 'var(--accent-9)' }} />}
+                    </a>
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            );
+          })}
+        </SidebarMenu>
+      </SidebarGroupContent>
+    </SidebarGroup>
+  );
+}
+
 export function AppSidebar() {
   const [location] = useLocation();
+  const { user } = useAuth();
+
+  // Fetch user's clubs
+  const { data: userClubs = [] } = useQuery<Club[]>({
+    queryKey: ["/api/user/clubs"],
+    enabled: !!user,
+  });
+
+  // Fetch user's club roles
+  const { data: clubRoles = [] } = useQuery<ClubMember[]>({
+    queryKey: ["/api/user/club-roles"],
+    enabled: !!user,
+  });
 
   return (
     <Sidebar className="border-r border-[var(--stroke)]">
@@ -81,8 +127,10 @@ export function AppSidebar() {
           </a>
         </Link>
       </SidebarHeader>
+
       <SidebarContent className="p-3">
-        {navigation.map((section) => (
+        {/* Personal Navigation */}
+        {personalNavigation.map((section) => (
           <SidebarGroup key={section.group}>
             <SidebarGroupLabel className="px-3 py-2 fui-r-size-1 fui-r-weight-semi-bold" style={{ color: 'var(--gray-11)' }}>
               {section.group}
@@ -114,8 +162,20 @@ export function AppSidebar() {
             </SidebarGroupContent>
           </SidebarGroup>
         ))}
+
+        {/* Club-Specific Navigation - Only if user is in clubs */}
+        {userClubs.length > 0 && <ClubNavigation clubs={userClubs} />}
       </SidebarContent>
-      <SidebarFooter className="border-t border-[var(--stroke)] p-3">
+
+      <SidebarFooter className="border-t border-[var(--stroke)] p-3 space-y-2">
+        <Link href="/profile">
+          <a className="flex items-center gap-3 px-3 py-2.5 rounded-xl hover-elevate w-full" style={{ backgroundColor: 'var(--gray-a2)' }} data-testid="link-profile">
+            <Settings className="h-4 w-4" style={{ color: 'var(--gray-11)' }} />
+            <span className="fui-r-size-2 flex-1" style={{ color: 'var(--gray-12)' }}>
+              {user?.firstName} {user?.lastName}
+            </span>
+          </a>
+        </Link>
         <div className="fui-r-size-1 px-3" style={{ color: 'var(--gray-11)' }}>
           © 2024 Univo
         </div>

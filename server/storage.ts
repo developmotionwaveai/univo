@@ -1,378 +1,799 @@
-import {
-  type User,
-  type InsertUser,
-  type Member,
-  type InsertMember,
-  type FormTemplate,
-  type InsertFormTemplate,
-  type Application,
-  type InsertApplication,
-  type Event,
-  type InsertEvent,
-  type Rsvp,
-  type InsertRsvp,
-  type Announcement,
-  type InsertAnnouncement,
-  type Notification,
-  type InsertNotification,
-  type Campaign,
-  type InsertCampaign,
-  type Donation,
-  type InsertDonation,
-} from "@shared/schema";
-import { randomUUID } from "crypto";
+import { supabase } from "./db";
+import type { User, InsertUser } from "@shared/schema";
 
-export interface IStorage {
-  // Users
-  getUser(id: string): Promise<User | undefined>;
-  getUserByUsername(username: string): Promise<User | undefined>;
-  getUserByEmail(email: string): Promise<User | undefined>;
-  createUser(user: InsertUser): Promise<User>;
-
-  // Members
-  getAllMembers(): Promise<Member[]>;
-  getMember(id: string): Promise<Member | undefined>;
-  createMember(member: InsertMember): Promise<Member>;
-  updateMember(id: string, data: Partial<Member>): Promise<Member>;
-  deleteMember(id: string): Promise<void>;
-
-  // Form Templates
-  getAllFormTemplates(): Promise<FormTemplate[]>;
-  getFormTemplate(id: string): Promise<FormTemplate | undefined>;
-  createFormTemplate(template: InsertFormTemplate): Promise<FormTemplate>;
-  updateFormTemplate(id: string, data: Partial<FormTemplate>): Promise<FormTemplate>;
-
-  // Applications
-  getAllApplications(): Promise<Application[]>;
-  getApplication(id: string): Promise<Application | undefined>;
-  createApplication(application: InsertApplication): Promise<Application>;
-  updateApplication(id: string, data: Partial<Application>): Promise<Application>;
-
-  // Events
-  getAllEvents(): Promise<Event[]>;
-  getEvent(id: string): Promise<Event | undefined>;
-  createEvent(event: InsertEvent): Promise<Event>;
-  updateEvent(id: string, data: Partial<Event>): Promise<Event>;
-  deleteEvent(id: string): Promise<void>;
-
-  // RSVPs
-  getAllRsvps(): Promise<Rsvp[]>;
-  getRsvpsByEvent(eventId: string): Promise<Rsvp[]>;
-  createRsvp(rsvp: InsertRsvp): Promise<Rsvp>;
-  updateRsvp(id: string, data: Partial<Rsvp>): Promise<Rsvp>;
-
-  // Announcements
-  getAllAnnouncements(): Promise<Announcement[]>;
-  getAnnouncement(id: string): Promise<Announcement | undefined>;
-  createAnnouncement(announcement: InsertAnnouncement): Promise<Announcement>;
-
-  // Notifications
-  getAllNotifications(): Promise<Notification[]>;
-  getNotificationsByUser(userId: string): Promise<Notification[]>;
-  createNotification(notification: InsertNotification): Promise<Notification>;
-  updateNotification(id: string, data: Partial<Notification>): Promise<Notification>;
-  markAllAsRead(userId: string): Promise<void>;
-
-  // Campaigns
-  getAllCampaigns(): Promise<Campaign[]>;
-  getCampaign(id: string): Promise<Campaign | undefined>;
-  createCampaign(campaign: InsertCampaign): Promise<Campaign>;
-  updateCampaign(id: string, data: Partial<Campaign>): Promise<Campaign>;
-
-  // Donations
-  getAllDonations(): Promise<Donation[]>;
-  getDonationsByCampaign(campaignId: string): Promise<Donation[]>;
-  createDonation(donation: InsertDonation): Promise<Donation>;
-  updateDonation(id: string, data: Partial<Donation>): Promise<Donation>;
+// Helper functions to convert between camelCase and snake_case
+function camelToSnake(obj: any): any {
+  if (!obj || typeof obj !== 'object') return obj;
+  
+  const result: any = {};
+  for (const key in obj) {
+    const snakeKey = key.replace(/[A-Z]/g, letter => `_${letter.toLowerCase()}`);
+    result[snakeKey] = obj[key];
+  }
+  return result;
 }
 
-export class MemStorage implements IStorage {
-  private users: Map<string, User>;
-  private members: Map<string, Member>;
-  private formTemplates: Map<string, FormTemplate>;
-  private applications: Map<string, Application>;
-  private events: Map<string, Event>;
-  private rsvps: Map<string, Rsvp>;
-  private announcements: Map<string, Announcement>;
-  private notifications: Map<string, Notification>;
-  private campaigns: Map<string, Campaign>;
-  private donations: Map<string, Donation>;
-
-  constructor() {
-    this.users = new Map();
-    this.members = new Map();
-    this.formTemplates = new Map();
-    this.applications = new Map();
-    this.events = new Map();
-    this.rsvps = new Map();
-    this.announcements = new Map();
-    this.notifications = new Map();
-    this.campaigns = new Map();
-    this.donations = new Map();
+function snakeToCamel(obj: any): any {
+  if (!obj || typeof obj !== 'object') return obj;
+  
+  const result: any = {};
+  for (const key in obj) {
+    const camelKey = key.replace(/_([a-z])/g, (_, letter) => letter.toUpperCase());
+    result[camelKey] = obj[key];
   }
+  return result;
+}
 
+// Supabase REST API-based storage
+class SupabaseStorage {
   // Users
   async getUser(id: string): Promise<User | undefined> {
-    return this.users.get(id);
+    try {
+      const { data, error } = await supabase
+        .from("users")
+        .select()
+        .eq("id", id)
+        .limit(1)
+        .single();
+      
+      if (error && error.code !== "PGRST116") throw error;
+      return data ? snakeToCamel(data) : undefined;
+    } catch (error: any) {
+      console.error("Supabase error in getUser:", error.message);
+      throw error;
+    }
   }
 
   async getUserByUsername(username: string): Promise<User | undefined> {
-    return Array.from(this.users.values()).find((user) => user.username === username);
+    try {
+      const { data, error } = await supabase
+        .from("users")
+        .select()
+        .eq("username", username)
+        .limit(1)
+        .single();
+      
+      if (error && error.code !== "PGRST116") throw error;
+      return data ? snakeToCamel(data) : undefined;
+    } catch (error: any) {
+      console.error("Supabase error in getUserByUsername:", error.message);
+      throw error;
+    }
   }
 
   async getUserByEmail(email: string): Promise<User | undefined> {
-    return Array.from(this.users.values()).find((user) => user.email === email);
+    try {
+      const { data, error } = await supabase
+        .from("users")
+        .select()
+        .eq("email", email)
+        .limit(1)
+        .single();
+      
+      if (error && error.code !== "PGRST116") throw error;
+      return data ? snakeToCamel(data) : undefined;
+    } catch (error: any) {
+      console.error("Supabase error in getUserByEmail:", error.message);
+      throw error;
+    }
   }
 
   async createUser(insertUser: InsertUser): Promise<User> {
-    const id = randomUUID();
-    const user: User = { ...insertUser, id, createdAt: new Date() };
-    this.users.set(id, user);
-    return user;
+    try {
+      const snakeUser = camelToSnake(insertUser);
+      const { data, error } = await supabase
+        .from("users")
+        .insert([snakeUser])
+        .select()
+        .single();
+
+      if (error) throw error;
+      return snakeToCamel(data);
+    } catch (error: any) {
+      console.error("Supabase error in createUser:", error.message);
+      throw error;
+    }
   }
 
-  // Members
-  async getAllMembers(): Promise<Member[]> {
-    return Array.from(this.members.values());
+  async updateUser(id: string, updates: Partial<User>): Promise<User> {
+    try {
+      const snakeUpdates = camelToSnake(updates);
+      const { data, error } = await supabase
+        .from("users")
+        .update(snakeUpdates)
+        .eq("id", id)
+        .select()
+        .single();
+
+      if (error) throw error;
+      return snakeToCamel(data);
+    } catch (error: any) {
+      console.error("Supabase error in updateUser:", error.message);
+      throw error;
+    }
   }
 
-  async getMember(id: string): Promise<Member | undefined> {
-    return this.members.get(id);
+  // Clubs
+  async getAllClubs(): Promise<any[]> {
+    try {
+      const { data, error } = await supabase
+        .from("clubs")
+        .select();
+      
+      if (error) throw error;
+      return (data || []).map(snakeToCamel);
+    } catch (error: any) {
+      console.error("Supabase error in getAllClubs:", error.message);
+      throw error;
+    }
   }
 
-  async createMember(insertMember: InsertMember): Promise<Member> {
-    const id = randomUUID();
-    const member: Member = { ...insertMember, id, joinedAt: new Date() };
-    this.members.set(id, member);
-    return member;
+  async getClub(id: string): Promise<any | undefined> {
+    try {
+      const { data, error } = await supabase
+        .from("clubs")
+        .select()
+        .eq("id", id)
+        .limit(1)
+        .single();
+      
+      if (error && error.code !== "PGRST116") throw error;
+      return data ? snakeToCamel(data) : undefined;
+    } catch (error: any) {
+      console.error("Supabase error in getClub:", error.message);
+      throw error;
+    }
   }
 
-  async updateMember(id: string, data: Partial<Member>): Promise<Member> {
-    const member = this.members.get(id);
-    if (!member) throw new Error("Member not found");
-    const updated = { ...member, ...data };
-    this.members.set(id, updated);
-    return updated;
+  async getClubByName(name: string): Promise<any | undefined> {
+    try {
+      const { data, error } = await supabase
+        .from("clubs")
+        .select()
+        .eq("name", name)
+        .limit(1)
+        .single();
+      
+      if (error && error.code !== "PGRST116") throw error;
+      return data ? snakeToCamel(data) : undefined;
+    } catch (error: any) {
+      console.error("Supabase error in getClubByName:", error.message);
+      throw error;
+    }
   }
 
-  async deleteMember(id: string): Promise<void> {
-    this.members.delete(id);
+  async createClub(data: any): Promise<any> {
+    try {
+      const snakeData = camelToSnake(data);
+      const { data: result, error } = await supabase
+        .from("clubs")
+        .insert([snakeData])
+        .select()
+        .single();
+      
+      if (error) throw error;
+      return snakeToCamel(result);
+    } catch (error: any) {
+      console.error("Supabase error in createClub:", error.message);
+      throw error;
+    }
   }
 
-  // Form Templates
-  async getAllFormTemplates(): Promise<FormTemplate[]> {
-    return Array.from(this.formTemplates.values());
+  async updateClub(id: string, data: any): Promise<any> {
+    try {
+      const snakeData = camelToSnake(data);
+      const { data: result, error } = await supabase
+        .from("clubs")
+        .update(snakeData)
+        .eq("id", id)
+        .select()
+        .single();
+      
+      if (error) throw error;
+      return snakeToCamel(result);
+    } catch (error: any) {
+      console.error("Supabase error in updateClub:", error.message);
+      throw error;
+    }
   }
 
-  async getFormTemplate(id: string): Promise<FormTemplate | undefined> {
-    return this.formTemplates.get(id);
+  async getUserClubs(userId: string): Promise<any[]> {
+    try {
+      const { data: members, error: memberError } = await supabase
+        .from("club_members")
+        .select("club_id")
+        .eq("user_id", userId)
+        .eq("status", "active");
+      
+      if (memberError) throw memberError;
+      if (!members || members.length === 0) return [];
+      
+      const clubIds = members.map(m => (m as any).club_id);
+      
+      const { data: clubs, error: clubError } = await supabase
+        .from("clubs")
+        .select()
+        .in("id", clubIds);
+      
+      if (clubError) throw clubError;
+      return (clubs || []).map(snakeToCamel);
+    } catch (error: any) {
+      console.error("Supabase error in getUserClubs:", error.message);
+      throw error;
+    }
   }
 
-  async createFormTemplate(insertTemplate: InsertFormTemplate): Promise<FormTemplate> {
-    const id = randomUUID();
-    const template: FormTemplate = { ...insertTemplate, id, createdAt: new Date() };
-    this.formTemplates.set(id, template);
-    return template;
+  async getUserClubRoles(userId: string): Promise<any[]> {
+    try {
+      const { data, error } = await supabase
+        .from("club_members")
+        .select("club_id, role, status")
+        .eq("user_id", userId);
+      
+      if (error) throw error;
+      return (data || []).map(m => ({
+        clubId: (m as any).club_id,
+        role: m.role,
+        status: m.status,
+      }));
+    } catch (error: any) {
+      console.error("Supabase error in getUserClubRoles:", error.message);
+      throw error;
+    }
   }
 
-  async updateFormTemplate(id: string, data: Partial<FormTemplate>): Promise<FormTemplate> {
-    const template = this.formTemplates.get(id);
-    if (!template) throw new Error("Form template not found");
-    const updated = { ...template, ...data };
-    this.formTemplates.set(id, updated);
-    return updated;
+  async getClubMember(clubId: string, userId: string): Promise<any | undefined> {
+    try {
+      const { data, error } = await supabase
+        .from("club_members")
+        .select()
+        .eq("club_id", clubId)
+        .eq("user_id", userId)
+        .limit(1)
+        .single();
+      
+      if (error && error.code !== "PGRST116") throw error;
+      return data ? snakeToCamel(data) : undefined;
+    } catch (error: any) {
+      console.error("Supabase error in getClubMember:", error.message);
+      throw error;
+    }
   }
 
-  // Applications
-  async getAllApplications(): Promise<Application[]> {
-    return Array.from(this.applications.values());
+  async getClubMembers(clubId: string): Promise<any[]> {
+    try {
+      const { data, error } = await supabase
+        .from("club_members")
+        .select(`
+          *,
+          users (
+            id,
+            username,
+            email,
+            first_name,
+            last_name
+          )
+        `)
+        .eq("club_id", clubId);
+
+      if (error) throw error;
+      return (data || []).map(member => {
+        const camelMember = snakeToCamel(member);
+        if (member.users) {
+          camelMember.user = snakeToCamel(member.users);
+        }
+        return camelMember;
+      });
+    } catch (error: any) {
+      console.error("Supabase error in getClubMembers:", error.message);
+      throw error;
+    }
   }
 
-  async getApplication(id: string): Promise<Application | undefined> {
-    return this.applications.get(id);
+  async addClubMember(data: any): Promise<any> {
+    try {
+      const snakeData = camelToSnake(data);
+      const { data: result, error } = await supabase
+        .from("club_members")
+        .insert([snakeData])
+        .select()
+        .single();
+      
+      if (error) throw error;
+      return snakeToCamel(result);
+    } catch (error: any) {
+      console.error("Supabase error in addClubMember:", error.message);
+      throw error;
+    }
   }
 
-  async createApplication(insertApplication: InsertApplication): Promise<Application> {
-    const id = randomUUID();
-    const application: Application = {
-      ...insertApplication,
-      id,
-      submittedAt: new Date(),
-      reviewedAt: null,
-      reviewedBy: null,
-    };
-    this.applications.set(id, application);
-    return application;
+  async updateClubMember(id: string, data: any): Promise<any> {
+    try {
+      const snakeData = camelToSnake(data);
+      const { data: result, error } = await supabase
+        .from("club_members")
+        .update(snakeData)
+        .eq("id", id)
+        .select()
+        .single();
+      
+      if (error) throw error;
+      return snakeToCamel(result);
+    } catch (error: any) {
+      console.error("Supabase error in updateClubMember:", error.message);
+      throw error;
+    }
   }
 
-  async updateApplication(id: string, data: Partial<Application>): Promise<Application> {
-    const application = this.applications.get(id);
-    if (!application) throw new Error("Application not found");
-    const updated = { ...application, ...data };
-    this.applications.set(id, updated);
-    return updated;
+  async removeClubMember(id: string): Promise<void> {
+    try {
+      const { error } = await supabase
+        .from("club_members")
+        .delete()
+        .eq("id", id);
+      
+      if (error) throw error;
+    } catch (error: any) {
+      console.error("Supabase error in removeClubMember:", error.message);
+      throw error;
+    }
   }
 
-  // Events
-  async getAllEvents(): Promise<Event[]> {
-    return Array.from(this.events.values());
+  async getClubApplications(clubId: string): Promise<any[]> {
+    try {
+      const { data, error } = await supabase
+        .from("club_applications")
+        .select(`
+          *,
+          users (
+            id,
+            username,
+            email,
+            first_name,
+            last_name
+          )
+        `)
+        .eq("club_id", clubId);
+
+      if (error) throw error;
+      return (data || []).map(app => {
+        const camelApp = snakeToCamel(app);
+        // Ensure user data is properly formatted
+        if (app.users) {
+          camelApp.user = snakeToCamel(app.users);
+        }
+        return camelApp;
+      });
+    } catch (error: any) {
+      console.error("Supabase error in getClubApplications:", error.message);
+      throw error;
+    }
   }
 
-  async getEvent(id: string): Promise<Event | undefined> {
-    return this.events.get(id);
+  async createClubApplication(data: any): Promise<any> {
+    try {
+      const snakeData = camelToSnake(data);
+      const { data: result, error } = await supabase
+        .from("club_applications")
+        .insert([snakeData])
+        .select()
+        .single();
+      
+      if (error) throw error;
+      return snakeToCamel(result);
+    } catch (error: any) {
+      console.error("Supabase error in createClubApplication:", error.message);
+      throw error;
+    }
   }
 
-  async createEvent(insertEvent: InsertEvent): Promise<Event> {
-    const id = randomUUID();
-    const event: Event = { ...insertEvent, id, createdAt: new Date() };
-    this.events.set(id, event);
-    return event;
+  async updateClubApplication(id: string, data: any): Promise<any> {
+    try {
+      const snakeData = camelToSnake(data);
+      const { data: result, error } = await supabase
+        .from("club_applications")
+        .update(snakeData)
+        .eq("id", id)
+        .select()
+        .single();
+      
+      if (error) throw error;
+      return snakeToCamel(result);
+    } catch (error: any) {
+      console.error("Supabase error in updateClubApplication:", error.message);
+      throw error;
+    }
   }
 
-  async updateEvent(id: string, data: Partial<Event>): Promise<Event> {
-    const event = this.events.get(id);
-    if (!event) throw new Error("Event not found");
-    const updated = { ...event, ...data };
-    this.events.set(id, updated);
-    return updated;
+  async getUserApplications(userId: string): Promise<any[]> {
+    try {
+      const { data, error} = await supabase
+        .from("club_applications")
+        .select(`
+          *,
+          clubs (
+            id,
+            name,
+            description,
+            category
+          )
+        `)
+        .eq("user_id", userId);
+
+      if (error) throw error;
+      return (data || []).map(app => {
+        const camelApp = snakeToCamel(app);
+        if (app.clubs) {
+          camelApp.club = snakeToCamel(app.clubs);
+        }
+        return camelApp;
+      });
+    } catch (error: any) {
+      console.error("Supabase error in getUserApplications:", error.message);
+      throw error;
+    }
+  }
+
+  async getApplicationById(id: string): Promise<any | undefined> {
+    try {
+      const { data, error } = await supabase
+        .from("club_applications")
+        .select()
+        .eq("id", id)
+        .single();
+      
+      if (error && error.code === 'PGRST116') return undefined;
+      if (error) throw error;
+      return data ? snakeToCamel(data) : undefined;
+    } catch (error: any) {
+      console.error("Supabase error in getApplicationById:", error.message);
+      throw error;
+    }
+  }
+
+  async deleteApplication(id: string): Promise<void> {
+    try {
+      const { error } = await supabase
+        .from("club_applications")
+        .delete()
+        .eq("id", id);
+      
+      if (error) throw error;
+    } catch (error: any) {
+      console.error("Supabase error in deleteApplication:", error.message);
+      throw error;
+    }
+  }
+
+  async getUserApplicationsByClub(userId: string, clubId: string): Promise<any | undefined> {
+    try {
+      const { data, error } = await supabase
+        .from("club_applications")
+        .select()
+        .eq("user_id", userId)
+        .eq("club_id", clubId)
+        .single();
+      
+      if (error && error.code === 'PGRST116') return undefined;
+      if (error) throw error;
+      return data ? snakeToCamel(data) : undefined;
+    } catch (error: any) {
+      console.error("Supabase error in getUserApplicationsByClub:", error.message);
+      throw error;
+    }
+  }
+
+  async getClubDues(clubId: string): Promise<any[]> {
+    try {
+      const { data, error } = await supabase
+        .from("club_dues")
+        .select()
+        .eq("club_id", clubId);
+      
+      if (error) throw error;
+      return (data || []).map(snakeToCamel);
+    } catch (error: any) {
+      console.error("Supabase error in getClubDues:", error.message);
+      throw error;
+    }
+  }
+
+  async createClubDues(data: any): Promise<any> {
+    try {
+      const snakeData = camelToSnake(data);
+      const { data: result, error } = await supabase
+        .from("club_dues")
+        .insert([snakeData])
+        .select()
+        .single();
+      
+      if (error) throw error;
+      return snakeToCamel(result);
+    } catch (error: any) {
+      console.error("Supabase error in createClubDues:", error.message);
+      throw error;
+    }
+  }
+
+  async getUserDuesPayments(userId: string): Promise<any[]> {
+    try {
+      const { data, error } = await supabase
+        .from("dues_payments")
+        .select()
+        .eq("user_id", userId);
+      
+      if (error) throw error;
+      return (data || []).map(snakeToCamel);
+    } catch (error: any) {
+      console.error("Supabase error in getUserDuesPayments:", error.message);
+      throw error;
+    }
+  }
+
+  async createDuesPayment(data: any): Promise<any> {
+    try {
+      const snakeData = camelToSnake(data);
+      const { data: result, error } = await supabase
+        .from("dues_payments")
+        .insert([snakeData])
+        .select()
+        .single();
+      
+      if (error) throw error;
+      return snakeToCamel(result);
+    } catch (error: any) {
+      console.error("Supabase error in createDuesPayment:", error.message);
+      throw error;
+    }
+  }
+
+  async getAllEvents(): Promise<any[]> {
+    try {
+      const { data, error } = await supabase
+        .from("events")
+        .select();
+      
+      if (error) throw error;
+      return (data || []).map(snakeToCamel);
+    } catch (error: any) {
+      console.error("Supabase error in getAllEvents:", error.message);
+      throw error;
+    }
+  }
+
+  async getEvent(id: string): Promise<any | undefined> {
+    try {
+      const { data, error } = await supabase
+        .from("events")
+        .select()
+        .eq("id", id)
+        .limit(1)
+        .single();
+      
+      if (error && error.code !== "PGRST116") throw error;
+      return data ? snakeToCamel(data) : undefined;
+    } catch (error: any) {
+      console.error("Supabase error in getEvent:", error.message);
+      throw error;
+    }
+  }
+
+  async getEventByTitle(title: string): Promise<any | undefined> {
+    try {
+      const { data, error } = await supabase
+        .from("events")
+        .select()
+        .eq("title", title)
+        .limit(1)
+        .single();
+      
+      if (error && error.code !== "PGRST116") throw error;
+      return data ? snakeToCamel(data) : undefined;
+    } catch (error: any) {
+      console.error("Supabase error in getEventByTitle:", error.message);
+      throw error;
+    }
+  }
+
+  async getClubEvents(clubId: string): Promise<any[]> {
+    try {
+      const { data, error } = await supabase
+        .from("events")
+        .select()
+        .eq("club_id", clubId);
+      
+      if (error) throw error;
+      return (data || []).map(snakeToCamel);
+    } catch (error: any) {
+      console.error("Supabase error in getClubEvents:", error.message);
+      throw error;
+    }
+  }
+
+  async createEvent(data: any): Promise<any> {
+    try {
+      const snakeData = camelToSnake(data);
+      const { data: result, error } = await supabase
+        .from("events")
+        .insert([snakeData])
+        .select()
+        .single();
+      
+      if (error) throw error;
+      return snakeToCamel(result);
+    } catch (error: any) {
+      console.error("Supabase error in createEvent:", error.message);
+      throw error;
+    }
+  }
+
+  async updateEvent(id: string, data: any): Promise<any> {
+    try {
+      const snakeData = camelToSnake(data);
+      const { data: result, error } = await supabase
+        .from("events")
+        .update(snakeData)
+        .eq("id", id)
+        .select()
+        .single();
+      
+      if (error) throw error;
+      return snakeToCamel(result);
+    } catch (error: any) {
+      console.error("Supabase error in updateEvent:", error.message);
+      throw error;
+    }
   }
 
   async deleteEvent(id: string): Promise<void> {
-    this.events.delete(id);
+    try {
+      const { error } = await supabase
+        .from("events")
+        .delete()
+        .eq("id", id);
+      
+      if (error) throw error;
+    } catch (error: any) {
+      console.error("Supabase error in deleteEvent:", error.message);
+      throw error;
+    }
   }
 
-  // RSVPs
-  async getAllRsvps(): Promise<Rsvp[]> {
-    return Array.from(this.rsvps.values());
+  // Stubs
+  async getAllMembers(): Promise<any[]> { return []; }
+  async getMember(id: string): Promise<any | undefined> { return undefined; }
+  async createMember(data: any): Promise<any> { return data; }
+  async updateMember(id: string, data: any): Promise<any> { return data; }
+  async deleteMember(id: string): Promise<void> {}
+  async getAllCampaigns(): Promise<any[]> { return []; }
+  async getCampaign(id: string): Promise<any | undefined> { return undefined; }
+  async getClubCampaigns(clubId: string): Promise<any[]> { return []; }
+  async createCampaign(data: any): Promise<any> { return data; }
+  async updateCampaign(id: string, data: any): Promise<any> { return data; }
+  async getAllApplications(): Promise<any[]> { return []; }
+  async getApplication(id: string): Promise<any | undefined> { return undefined; }
+  async createApplication(data: any): Promise<any> { return data; }
+  async updateApplication(id: string, data: any): Promise<any> { return data; }
+
+  async getAllAnnouncements(): Promise<any[]> {
+    try {
+      const { data, error } = await supabase
+        .from("announcements")
+        .select()
+        .order("created_at", { ascending: false });
+
+      if (error) throw error;
+      return (data || []).map(snakeToCamel);
+    } catch (error: any) {
+      console.error("Supabase error in getAllAnnouncements:", error.message);
+      throw error;
+    }
   }
 
-  async getRsvpsByEvent(eventId: string): Promise<Rsvp[]> {
-    return Array.from(this.rsvps.values()).filter((rsvp) => rsvp.eventId === eventId);
+  async getClubAnnouncements(clubId: string): Promise<any[]> {
+    try {
+      const { data, error } = await supabase
+        .from("announcements")
+        .select()
+        .eq("club_id", clubId)
+        .order("created_at", { ascending: false });
+
+      if (error) throw error;
+      return (data || []).map(snakeToCamel);
+    } catch (error: any) {
+      console.error("Supabase error in getClubAnnouncements:", error.message);
+      throw error;
+    }
   }
 
-  async createRsvp(insertRsvp: InsertRsvp): Promise<Rsvp> {
-    const id = randomUUID();
-    const rsvp: Rsvp = { ...insertRsvp, id, createdAt: new Date() };
-    this.rsvps.set(id, rsvp);
-    return rsvp;
+  async createAnnouncement(data: any): Promise<any> {
+    try {
+      const snakeData = camelToSnake(data);
+      const { data: result, error } = await supabase
+        .from("announcements")
+        .insert([snakeData])
+        .select()
+        .single();
+
+      if (error) throw error;
+      return snakeToCamel(result);
+    } catch (error: any) {
+      console.error("Supabase error in createAnnouncement:", error.message);
+      throw error;
+    }
   }
 
-  async updateRsvp(id: string, data: Partial<Rsvp>): Promise<Rsvp> {
-    const rsvp = this.rsvps.get(id);
-    if (!rsvp) throw new Error("RSVP not found");
-    const updated = { ...rsvp, ...data };
-    this.rsvps.set(id, updated);
-    return updated;
+  async createNotification(data: any): Promise<any> {
+    try {
+      const snakeData = camelToSnake(data);
+      const { data: result, error } = await supabase
+        .from("notifications")
+        .insert([snakeData])
+        .select()
+        .single();
+      
+      if (error) throw error;
+      return result ? snakeToCamel(result) : result;
+    } catch (error: any) {
+      console.error("Supabase error in createNotification:", error.message);
+      throw error;
+    }
   }
 
-  // Announcements
-  async getAllAnnouncements(): Promise<Announcement[]> {
-    return Array.from(this.announcements.values());
+  async getNotificationsByUser(userId: string): Promise<any[]> {
+    try {
+      const { data, error } = await supabase
+        .from("notifications")
+        .select()
+        .eq("user_id", userId)
+        .order("created_at", { ascending: false });
+      
+      if (error) throw error;
+      return (data || []).map(snakeToCamel);
+    } catch (error: any) {
+      console.error("Supabase error in getNotificationsByUser:", error.message);
+      throw error;
+    }
   }
 
-  async getAnnouncement(id: string): Promise<Announcement | undefined> {
-    return this.announcements.get(id);
-  }
-
-  async createAnnouncement(insertAnnouncement: InsertAnnouncement): Promise<Announcement> {
-    const id = randomUUID();
-    const announcement: Announcement = { ...insertAnnouncement, id, createdAt: new Date() };
-    this.announcements.set(id, announcement);
-    return announcement;
-  }
-
-  // Notifications
-  async getAllNotifications(): Promise<Notification[]> {
-    return Array.from(this.notifications.values());
-  }
-
-  async getNotificationsByUser(userId: string): Promise<Notification[]> {
-    return Array.from(this.notifications.values()).filter((n) => n.userId === userId);
-  }
-
-  async createNotification(insertNotification: InsertNotification): Promise<Notification> {
-    const id = randomUUID();
-    const notification: Notification = { ...insertNotification, id, createdAt: new Date() };
-    this.notifications.set(id, notification);
-    return notification;
-  }
-
-  async updateNotification(id: string, data: Partial<Notification>): Promise<Notification> {
-    const notification = this.notifications.get(id);
-    if (!notification) throw new Error("Notification not found");
-    const updated = { ...notification, ...data };
-    this.notifications.set(id, updated);
-    return updated;
+  async updateNotification(id: string, data: any): Promise<any> {
+    try {
+      const snakeData = camelToSnake(data);
+      const { data: result, error } = await supabase
+        .from("notifications")
+        .update(snakeData)
+        .eq("id", id)
+        .select()
+        .single();
+      
+      if (error) throw error;
+      return result ? snakeToCamel(result) : result;
+    } catch (error: any) {
+      console.error("Supabase error in updateNotification:", error.message);
+      throw error;
+    }
   }
 
   async markAllAsRead(userId: string): Promise<void> {
-    const userNotifications = await this.getNotificationsByUser(userId);
-    userNotifications.forEach((notification) => {
-      this.notifications.set(notification.id, { ...notification, isRead: true });
-    });
-  }
-
-  // Campaigns
-  async getAllCampaigns(): Promise<Campaign[]> {
-    return Array.from(this.campaigns.values());
-  }
-
-  async getCampaign(id: string): Promise<Campaign | undefined> {
-    return this.campaigns.get(id);
-  }
-
-  async createCampaign(insertCampaign: InsertCampaign): Promise<Campaign> {
-    const id = randomUUID();
-    const campaign: Campaign = { ...insertCampaign, id, currentAmount: 0, createdAt: new Date() };
-    this.campaigns.set(id, campaign);
-    return campaign;
-  }
-
-  async updateCampaign(id: string, data: Partial<Campaign>): Promise<Campaign> {
-    const campaign = this.campaigns.get(id);
-    if (!campaign) throw new Error("Campaign not found");
-    const updated = { ...campaign, ...data };
-    this.campaigns.set(id, updated);
-    return updated;
-  }
-
-  // Donations
-  async getAllDonations(): Promise<Donation[]> {
-    return Array.from(this.donations.values());
-  }
-
-  async getDonationsByCampaign(campaignId: string): Promise<Donation[]> {
-    return Array.from(this.donations.values()).filter((d) => d.campaignId === campaignId);
-  }
-
-  async createDonation(insertDonation: InsertDonation): Promise<Donation> {
-    const id = randomUUID();
-    const donation: Donation = { ...insertDonation, id, createdAt: new Date() };
-    this.donations.set(id, donation);
-
-    // Update campaign current amount
-    const campaign = await this.getCampaign(donation.campaignId);
-    if (campaign) {
-      await this.updateCampaign(campaign.id, {
-        currentAmount: campaign.currentAmount + donation.amount,
-      });
+    try {
+      const { error } = await supabase
+        .from("notifications")
+        .update({ is_read: true })
+        .eq("user_id", userId);
+      
+      if (error) throw error;
+    } catch (error: any) {
+      console.error("Supabase error in markAllAsRead:", error.message);
+      throw error;
     }
-
-    return donation;
   }
-
-  async updateDonation(id: string, data: Partial<Donation>): Promise<Donation> {
-    const donation = this.donations.get(id);
-    if (!donation) throw new Error("Donation not found");
-    const updated = { ...donation, ...data };
-    this.donations.set(id, updated);
-    return updated;
-  }
+  async getAllRsvps(): Promise<any[]> { return []; }
+  async getRsvpsByEvent(eventId: string): Promise<any[]> { return []; }
+  async createRsvp(data: any): Promise<any> { return data; }
+  async getAllFormTemplates(): Promise<any[]> { return []; }
+  async createFormTemplate(data: any): Promise<any> { return data; }
+  async getDonationsByCampaign(campaignId: string): Promise<any[]> { return []; }
+  async createDonation(data: any): Promise<any> { return data; }
 }
 
-import { SupabaseStorage } from "./supabase-storage";
-
-// Use Supabase storage in production, in-memory for testing
-export const storage = (process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY)
-  ? new SupabaseStorage()
-  : new MemStorage();
+export const storage = new SupabaseStorage();

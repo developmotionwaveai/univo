@@ -1,6 +1,9 @@
 import type { Express, Request, Response } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
+import { db } from "./db";
+import { eq } from "drizzle-orm";
+import { users } from "@shared/schema";
 import bcrypt from "bcrypt";
 import session from "express-session";
 import MemoryStore from "memorystore";
@@ -25,15 +28,93 @@ export async function registerRoutes(app: Express): Promise<Server> {
         checkPeriod: 86400000, // 24 hours
       }),
       cookie: {
+        path: "/",
         maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
         httpOnly: true,
-        secure: process.env.NODE_ENV === "production",
+        secure: false,
+        sameSite: "lax",
       },
     })
   );
 
+  // Initialize test user on startup
+  (async () => {
+    try {
+      const existingUser = await storage.getUserByUsername("testuser");
+      if (!existingUser) {
+        const hashedPassword = await bcrypt.hash("test123", 10);
+        const testUser = await storage.createUser({
+          username: "testuser",
+          email: "testuser@example.com",
+          password: hashedPassword,
+          firstName: "Test",
+          lastName: "User",
+        });
+        console.log("✅ Created test user (testuser/test123)");
+        
+        // Add testUser to some demo clubs
+        try {
+          const clubs = await storage.getAllClubs();
+          if (clubs.length > 0) {
+            // Add to first 3 clubs with different roles
+            const clubsToJoin = clubs.slice(0, 3);
+            const roles = ["admin", "officer", "member"];
+            
+            for (let i = 0; i < clubsToJoin.length; i++) {
+              const club = clubsToJoin[i];
+              // Check if already a member
+              const existingMember = await storage.getClubMember(club.id, testUser.id);
+              if (!existingMember) {
+                await storage.addClubMember({
+                  clubId: club.id,
+                  userId: testUser.id,
+                  role: roles[i],
+                  status: "active",
+                });
+                console.log(`✅ Added testuser to ${club.name} as ${roles[i]}`);
+              }
+            }
+          }
+        } catch (memberError) {
+          console.log("ℹ️  Could not add testUser to clubs:", memberError);
+        }
+      } else {
+        // Add to clubs if not already a member
+        try {
+          const clubs = await storage.getAllClubs();
+          if (clubs.length > 0) {
+            const clubsToJoin = clubs.slice(0, 3);
+            const roles = ["admin", "officer", "member"];
+            
+            for (let i = 0; i < clubsToJoin.length; i++) {
+              const club = clubsToJoin[i];
+              const existingMember = await storage.getClubMember(club.id, existingUser.id);
+              if (!existingMember) {
+                await storage.addClubMember({
+                  clubId: club.id,
+                  userId: existingUser.id,
+                  role: roles[i],
+                  status: "active",
+                });
+              }
+            }
+          }
+        } catch (memberError) {
+          // Silently fail if clubs don't exist or other error
+        }
+      }
+    } catch (error) {
+      console.log("ℹ️  Test user already exists or initialization skipped");
+    }
+  })();
+
   // Auth middleware
   const requireAuth = (req: Request, res: Response, next: Function) => {
+    console.log("🔍 requireAuth - Session ID:", req.sessionID);
+    console.log("🔍 requireAuth - Session data:", req.session);
+    console.log("🔍 requireAuth - User ID in session:", req.session.userId);
+    console.log("🔍 requireAuth - Cookies:", req.headers.cookie);
+    
     if (!req.session.userId) {
       return res.status(401).json({ message: "Unauthorized" });
     }
@@ -43,7 +124,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Auth routes
   app.post("/api/auth/register", async (req, res) => {
     try {
-      const { username, email, password, role = "admin" } = req.body;
+      const { username, email, password, firstName, lastName } = req.body;
 
       const existingUser = await storage.getUserByUsername(username);
       if (existingUser) {
@@ -60,11 +141,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
         username,
         email,
         password: hashedPassword,
-        role,
+        firstName,
+        lastName,
       });
 
-      const { password: _, ...userWithoutPassword } = user;
-      res.json(userWithoutPassword);
+      req.session.userId = user.id;
+      req.session.save((err) => {
+        if (err) {
+          return res.status(500).json({ message: "Session save failed" });
+        }
+        const { password: _, ...userWithoutPassword } = user;
+        res.json(userWithoutPassword);
+      });
     } catch (error: any) {
       res.status(500).json({ message: error.message });
     }
@@ -85,8 +173,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       req.session.userId = user.id;
-      const { password: _, ...userWithoutPassword } = user;
-      res.json(userWithoutPassword);
+      req.session.save((err) => {
+        if (err) {
+          console.log("❌ Login session save error:", err);
+          return res.status(500).json({ message: "Session save failed" });
+        }
+        console.log("✅ Login successful - Session ID:", req.sessionID);
+        console.log("✅ Login successful - User ID:", user.id);
+        console.log("✅ Session data:", req.session);
+        const { password: _, ...userWithoutPassword } = user;
+        res.json(userWithoutPassword);
+      });
     } catch (error: any) {
       res.status(500).json({ message: error.message });
     }
@@ -111,7 +208,346 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Dashboard stats
+  // Update user profile
+  app.patch("/api/users/:id", requireAuth, async (req, res) => {
+    try {
+      // Users can only update their own profile
+      if (req.params.id !== req.session.userId) {
+        return res.status(403).json({ message: "Cannot update other users' profiles" });
+      }
+
+      const { firstName, lastName, bio } = req.body;
+      const user = await storage.getUser(req.params.id);
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+
+      const updated = await storage.updateUser(req.params.id, {
+        firstName: firstName || user.firstName,
+        lastName: lastName || user.lastName,
+        bio: bio || user.bio,
+      });
+
+      const { password: _, ...userWithoutPassword } = updated;
+      res.json(userWithoutPassword);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // ===================== CLUB ROUTES =====================
+  
+  // Get all clubs (public discovery)
+  app.get("/api/clubs", async (req, res) => {
+    try {
+      const clubs = await storage.getAllClubs();
+      res.json(clubs);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Get a specific club
+  app.get("/api/clubs/:id", async (req, res) => {
+    try {
+      const club = await storage.getClub(req.params.id);
+      if (!club) {
+        return res.status(404).json({ message: "Club not found" });
+      }
+      res.json(club);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Create a club (admin only)
+  app.post("/api/clubs", requireAuth, async (req, res) => {
+    try {
+      const club = await storage.createClub({
+        ...req.body,
+        createdBy: req.session.userId!,
+      });
+      // Add creator as admin
+      await storage.addClubMember({
+        clubId: club.id,
+        userId: req.session.userId!,
+        role: "admin",
+        status: "active",
+      });
+      res.json(club);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Update a club (admin only)
+  app.patch("/api/clubs/:id", requireAuth, async (req, res) => {
+    try {
+      // Check if user is admin of this club
+      const clubMember = await storage.getClubMember(req.params.id, req.session.userId!);
+      if (!clubMember || clubMember.role !== "admin") {
+        return res.status(403).json({ message: "Only club admins can update club details" });
+      }
+      const club = await storage.updateClub(req.params.id, req.body);
+      res.json(club);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Get user's clubs
+  app.get("/api/user/clubs", requireAuth, async (req, res) => {
+    try {
+      const clubs = await storage.getUserClubs(req.session.userId!);
+      res.json(clubs);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Get user's club roles
+  app.get("/api/user/club-roles", requireAuth, async (req, res) => {
+    try {
+      const roles = await storage.getUserClubRoles(req.session.userId!);
+      res.json(roles);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Get user's role in a specific club
+  app.get("/api/clubs/:id/user-role", requireAuth, async (req, res) => {
+    try {
+      const role = await storage.getClubMember(req.params.id, req.session.userId!);
+      res.json(role || null);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Get club members
+  app.get("/api/clubs/:id/members", async (req, res) => {
+    try {
+      const members = await storage.getClubMembers(req.params.id);
+      res.json(members);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Add member to club (admin only, or auto-accept)
+  app.post("/api/clubs/:id/members", requireAuth, async (req, res) => {
+    try {
+      // Check if user is admin of this club
+      const clubMember = await storage.getClubMember(req.params.id, req.session.userId!);
+      if (!clubMember || clubMember.role !== "admin") {
+        return res.status(403).json({ message: "Only club admins can add members" });
+      }
+      const member = await storage.addClubMember({
+        clubId: req.params.id,
+        userId: req.body.userId,
+        role: req.body.role || "member",
+        status: "active",
+      });
+      res.json(member);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Update club member role (admin only)
+  app.patch("/api/club-members/:id", requireAuth, async (req, res) => {
+    try {
+      const member = await storage.updateClubMember(req.params.id, req.body);
+      res.json(member);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Remove member from club (admin only)
+  app.delete("/api/club-members/:id", requireAuth, async (req, res) => {
+    try {
+      await storage.removeClubMember(req.params.id);
+      res.json({ message: "Member removed" });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Get club applications
+  app.get("/api/clubs/:id/applications", requireAuth, async (req, res) => {
+    try {
+      const applications = await storage.getClubApplications(req.params.id);
+      res.json(applications);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Apply to a club
+  app.post("/api/clubs/:id/apply", requireAuth, async (req, res) => {
+    try {
+      const { coverLetter } = req.body;
+      
+      // Check if user is already a member
+      const existingMember = await storage.getClubMember(req.params.id, req.session.userId!);
+      if (existingMember && existingMember.status === "active") {
+        return res.status(400).json({ message: "You are already a member of this club" });
+      }
+      
+      // Check if user already has a pending application
+      const existingApplication = await storage.getUserApplicationsByClub(req.session.userId!, req.params.id);
+      if (existingApplication && existingApplication.status === "pending") {
+        return res.status(400).json({ message: "You already have a pending application to this club" });
+      }
+      
+      const application = await storage.createClubApplication({
+        clubId: req.params.id,
+        userId: req.session.userId!,
+        coverLetter: coverLetter || "",
+        status: "pending",
+      });
+      res.json(application);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Review club application (admin only)
+  app.patch("/api/club-applications/:id", requireAuth, async (req, res) => {
+    try {
+      const application = await storage.updateClubApplication(req.params.id, {
+        ...req.body,
+        reviewedAt: new Date(),
+        reviewedBy: req.session.userId!,
+      });
+
+      // If approved, add user to club
+      if (req.body.status === "accepted") {
+        await storage.addClubMember({
+          clubId: application.clubId,
+          userId: application.userId,
+          role: "member",
+          status: "active",
+        });
+      }
+
+      // Create notification for applicant about the decision
+      const club = await storage.getClub(application.clubId);
+      const notificationMessage = req.body.status === "accepted" 
+        ? `Great news! Your application to join ${club?.name || 'the club'} has been accepted! 🎉`
+        : `Your application to join ${club?.name || 'the club'} was not accepted this time. Feel free to apply again later!`;
+
+      await storage.createNotification({
+        userId: application.userId,
+        type: "application",
+        title: `Application ${req.body.status}`,
+        message: notificationMessage,
+        relatedId: application.id,
+        isRead: false,
+      });
+
+      res.json(application);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Get user's club applications
+  app.get("/api/user/club-applications", requireAuth, async (req, res) => {
+    try {
+      const applications = await storage.getUserApplications(req.session.userId!);
+      res.json(applications);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Alias for /api/user/club-applications
+  app.get("/api/user/applications", requireAuth, async (req, res) => {
+    try {
+      const applications = await storage.getUserApplications(req.session.userId!);
+      res.json(applications);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Delete application (withdraw application)
+  app.delete("/api/club-applications/:id", requireAuth, async (req, res) => {
+    try {
+      const application = await storage.getApplicationById(req.params.id);
+      if (!application) {
+        return res.status(404).json({ message: "Application not found" });
+      }
+      if (application.userId !== req.session.userId!) {
+        return res.status(403).json({ message: "Can only delete your own applications" });
+      }
+      if (application.status !== "pending") {
+        return res.status(400).json({ message: "Can only withdraw pending applications" });
+      }
+      await storage.deleteApplication(req.params.id);
+      res.json({ message: "Application withdrawn" });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // ===================== CLUB DUES ROUTES =====================
+
+  // Get club dues
+  app.get("/api/clubs/:id/dues", async (req, res) => {
+    try {
+      const dues = await storage.getClubDues(req.params.id);
+      res.json(dues);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Create club dues (admin only)
+  app.post("/api/clubs/:id/dues", requireAuth, async (req, res) => {
+    try {
+      const clubMember = await storage.getClubMember(req.params.id, req.session.userId!);
+      if (!clubMember || clubMember.role !== "admin") {
+        return res.status(403).json({ message: "Only club admins can create dues" });
+      }
+      const dues = await storage.createClubDues({
+        clubId: req.params.id,
+        ...req.body,
+      });
+      res.json(dues);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Get user's dues payments
+  app.get("/api/user/dues-payments", requireAuth, async (req, res) => {
+    try {
+      const payments = await storage.getUserDuesPayments(req.session.userId!);
+      res.json(payments);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Create dues payment
+  app.post("/api/dues-payments", async (req, res) => {
+    try {
+      const payment = await storage.createDuesPayment({
+        ...req.body,
+        paymentStatus: req.body.amount > 0 ? "pending" : "completed",
+      });
+      res.json(payment);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // ===================== DASHBOARD STATS =====================
+  
   app.get("/api/stats", requireAuth, async (req, res) => {
     try {
       const members = await storage.getAllMembers();
@@ -257,6 +693,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.get("/api/clubs/:id/events", async (req, res) => {
+    try {
+      const events = await storage.getClubEvents(req.params.id);
+      res.json(events);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
   app.get("/api/events/:id", async (req, res) => {
     try {
       const event = await storage.getEvent(req.params.id);
@@ -271,7 +716,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/events", requireAuth, async (req, res) => {
     try {
-      const event = await storage.createEvent(req.body);
+      const { maxAttendees, ticketPrice, ...eventData } = req.body;
+
+      // Map frontend fields to database schema
+      const mappedData = {
+        ...eventData,
+        price: ticketPrice ? Math.round(ticketPrice * 100) : 0, // Convert dollars to cents
+        createdBy: req.session.userId,
+      };
+
+      const event = await storage.createEvent(mappedData);
       res.json(event);
     } catch (error: any) {
       res.status(500).json({ message: error.message });
@@ -280,7 +734,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.patch("/api/events/:id", requireAuth, async (req, res) => {
     try {
-      const event = await storage.updateEvent(req.params.id, req.body);
+      const { maxAttendees, ...eventData } = req.body;
+      const event = await storage.updateEvent(req.params.id, eventData);
       res.json(event);
     } catch (error: any) {
       res.status(500).json({ message: error.message });
@@ -337,20 +792,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.get("/api/clubs/:id/announcements", async (req, res) => {
+    try {
+      const announcements = await storage.getClubAnnouncements(req.params.id);
+      res.json(announcements);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
   app.post("/api/announcements", requireAuth, async (req, res) => {
     try {
       const announcement = await storage.createAnnouncement(req.body);
 
-      // Create notifications for all users
-      const users = []; // In a real app, get all users based on targetGroup
-      for (const user of users) {
-        await storage.createNotification({
-          userId: user.id,
-          title: announcement.title,
-          message: announcement.content,
-          type: "announcement",
-          relatedId: announcement.id,
-        });
+      // Create notifications for all users if targetGroup is all
+      if (req.body.targetGroup === "all") {
+        // In a real app, create notifications based on targetGroup
       }
 
       res.json(announcement);
@@ -391,6 +848,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/campaigns", async (req, res) => {
     try {
       const campaigns = await storage.getAllCampaigns();
+      res.json(campaigns);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/clubs/:id/campaigns", async (req, res) => {
+    try {
+      const campaigns = await storage.getClubCampaigns(req.params.id);
       res.json(campaigns);
     } catch (error: any) {
       res.status(500).json({ message: error.message });

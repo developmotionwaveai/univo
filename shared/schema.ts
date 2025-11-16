@@ -3,13 +3,16 @@ import { pgTable, text, varchar, timestamp, integer, boolean, json } from "drizz
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
-// Users table - authentication
+// Users table - platform users (students/general users)
 export const users = pgTable("users", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   username: text("username").notNull().unique(),
   email: text("email").notNull().unique(),
   password: text("password").notNull(),
-  role: text("role").notNull().default("admin"), // admin, officer, member
+  firstName: text("first_name").notNull(),
+  lastName: text("last_name").notNull(),
+  avatar: text("avatar"),
+  bio: text("bio"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
@@ -21,7 +24,69 @@ export const insertUserSchema = createInsertSchema(users).omit({
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;
 
-// Members table - club members
+// Clubs table - all campus clubs
+export const clubs = pgTable("clubs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull().unique(),
+  description: text("description").notNull(),
+  logo: text("logo"),
+  banner: text("banner"),
+  category: text("category"), // Sports, Academic, Cultural, Service, etc.
+  website: text("website"),
+  email: text("email"),
+  maxMembers: integer("max_members"),
+  isActive: boolean("is_active").default(true),
+  createdBy: varchar("created_by").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const insertClubSchema = createInsertSchema(clubs).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertClub = z.infer<typeof insertClubSchema>;
+export type Club = typeof clubs.$inferSelect;
+
+// Club Members table - links users to clubs with roles
+export const clubMembers = pgTable("club_members", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  clubId: varchar("club_id").notNull(),
+  userId: varchar("user_id").notNull(),
+  role: text("role").notNull().default("member"), // member, officer, admin
+  status: text("status").notNull().default("active"), // active, inactive, pending
+  joinedAt: timestamp("joined_at").defaultNow().notNull(),
+});
+
+export const insertClubMemberSchema = createInsertSchema(clubMembers).omit({
+  id: true,
+  joinedAt: true,
+});
+
+export type InsertClubMember = z.infer<typeof insertClubMemberSchema>;
+export type ClubMember = typeof clubMembers.$inferSelect;
+
+// Club Applications table - track applications to clubs
+export const clubApplications = pgTable("club_applications", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  clubId: varchar("club_id").notNull(),
+  userId: varchar("user_id").notNull(),
+  coverLetter: text("cover_letter"),
+  status: text("status").notNull().default("pending"), // pending, accepted, rejected
+  submittedAt: timestamp("submitted_at").defaultNow().notNull(),
+  reviewedAt: timestamp("reviewed_at"),
+  reviewedBy: varchar("reviewed_by"),
+});
+
+export const insertClubApplicationSchema = createInsertSchema(clubApplications).omit({
+  id: true,
+  submittedAt: true,
+});
+
+export type InsertClubApplication = z.infer<typeof insertClubApplicationSchema>;
+export type ClubApplication = typeof clubApplications.$inferSelect;
+
+// Members table - legacy (kept for backwards compatibility, will be deprecated)
 export const members = pgTable("members", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   name: text("name").notNull(),
@@ -91,6 +156,7 @@ export type Application = typeof applications.$inferSelect;
 // Events
 export const events = pgTable("events", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  clubId: varchar("club_id"), // Optional - event can be club-specific or platform-wide
   title: text("title").notNull(),
   description: text("description").notNull(),
   banner: text("banner"), // Image URL
@@ -135,11 +201,12 @@ export type Rsvp = typeof rsvps.$inferSelect;
 // Announcements
 export const announcements = pgTable("announcements", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  clubId: varchar("club_id"), // Optional - announcement can be club-specific or platform-wide
   title: text("title").notNull(),
   content: text("content").notNull(),
   createdBy: varchar("created_by").notNull(),
   targetGroup: text("target_group").default("all"), // all, members, officers, custom
-  recipients: json("recipients").$type<string[]>(), // Array of member IDs for custom
+  recipients: json("recipients").$type<string[]>(), // Array of user IDs for custom
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
@@ -175,6 +242,7 @@ export type Notification = typeof notifications.$inferSelect;
 // Fundraising Campaigns
 export const campaigns = pgTable("campaigns", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  clubId: varchar("club_id"), // Optional - campaign can be club-specific or platform-wide
   title: text("title").notNull(),
   description: text("description").notNull(),
   image: text("image"), // Campaign header image
@@ -203,6 +271,45 @@ export const insertCampaignSchema = createInsertSchema(campaigns).omit({
 
 export type InsertCampaign = z.infer<typeof insertCampaignSchema>;
 export type Campaign = typeof campaigns.$inferSelect;
+
+// Club Dues
+export const clubDues = pgTable("club_dues", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  clubId: varchar("club_id").notNull(),
+  name: text("name").notNull(), // e.g., "Fall 2024 Dues"
+  amount: integer("amount").notNull(), // Amount in cents
+  dueDate: timestamp("due_date"),
+  isActive: boolean("is_active").default(true),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const insertClubDuesSchema = createInsertSchema(clubDues).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertClubDues = z.infer<typeof insertClubDuesSchema>;
+export type ClubDues = typeof clubDues.$inferSelect;
+
+// Dues Payments
+export const duesPayments = pgTable("dues_payments", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  duesId: varchar("dues_id").notNull(),
+  userId: varchar("user_id").notNull(),
+  amount: integer("amount").notNull(), // Amount paid in cents
+  paymentStatus: text("payment_status").default("pending"), // pending, completed, failed
+  stripePaymentId: text("stripe_payment_id"),
+  paidAt: timestamp("paid_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const insertDuesPaymentSchema = createInsertSchema(duesPayments).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertDuesPayment = z.infer<typeof insertDuesPaymentSchema>;
+export type DuesPayment = typeof duesPayments.$inferSelect;
 
 // Donations
 export const donations = pgTable("donations", {

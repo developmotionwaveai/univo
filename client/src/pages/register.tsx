@@ -9,8 +9,11 @@ import { Label } from "@/components/ui/label";
 import { Card } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
+import { useAuth } from "@/lib/auth";
 
 const registerSchema = z.object({
+  firstName: z.string().min(1, "First name is required"),
+  lastName: z.string().min(1, "Last name is required"),
   username: z.string().min(3, "Username must be at least 3 characters"),
   email: z.string().email("Invalid email address"),
   password: z.string().min(6, "Password must be at least 6 characters"),
@@ -25,6 +28,7 @@ type RegisterForm = z.infer<typeof registerSchema>;
 export default function Register() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
+  const { setUser } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
 
   const {
@@ -38,16 +42,20 @@ export default function Register() {
   const onSubmit = async (data: RegisterForm) => {
     setIsLoading(true);
     try {
-      await apiRequest("POST", "/api/auth/register", {
+      const response = await apiRequest("POST", "/api/auth/register", {
+        firstName: data.firstName,
+        lastName: data.lastName,
         username: data.username,
         email: data.email,
         password: data.password,
       });
+      const user = await response.json();
+      setUser(user);
       toast({
         title: "Registration successful",
-        description: "Your account has been created. Please sign in.",
+        description: `Welcome to Univo, ${user.firstName}!`,
       });
-      setLocation("/login");
+      setLocation("/dashboard");
     } catch (error: any) {
       toast({
         title: "Registration failed",
@@ -75,6 +83,41 @@ export default function Register() {
         </div>
 
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <Label htmlFor="firstName" className="fui-r-size-2" style={{ color: 'var(--gray-12)' }}>
+                First Name
+              </Label>
+              <Input
+                id="firstName"
+                type="text"
+                {...register("firstName")}
+                placeholder="John"
+                data-testid="input-firstName"
+                className="mt-1.5"
+              />
+              {errors.firstName && (
+                <p className="text-destructive fui-r-size-1 mt-1">{errors.firstName.message}</p>
+              )}
+            </div>
+            <div>
+              <Label htmlFor="lastName" className="fui-r-size-2" style={{ color: 'var(--gray-12)' }}>
+                Last Name
+              </Label>
+              <Input
+                id="lastName"
+                type="text"
+                {...register("lastName")}
+                placeholder="Doe"
+                data-testid="input-lastName"
+                className="mt-1.5"
+              />
+              {errors.lastName && (
+                <p className="text-destructive fui-r-size-1 mt-1">{errors.lastName.message}</p>
+              )}
+            </div>
+          </div>
+
           <div>
             <Label htmlFor="username" className="fui-r-size-2" style={{ color: 'var(--gray-12)' }}>
               Username
