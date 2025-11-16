@@ -7,8 +7,16 @@ import { users } from "@shared/schema";
 import bcrypt from "bcrypt";
 import session from "express-session";
 import MemoryStore from "memorystore";
+import Stripe from "stripe";
 
 const SessionStore = MemoryStore(session);
+
+// Initialize Stripe
+const stripe = process.env.STRIPE_SECRET_KEY
+  ? new Stripe(process.env.STRIPE_SECRET_KEY, {
+      apiVersion: "2024-11-20.acacia",
+    })
+  : null;
 
 // Extend Express Request type to include session user
 declare module "express-session" {
@@ -915,22 +923,89 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Stripe payment routes (ready for when keys are added)
-  app.post("/api/create-payment-intent", async (req, res) => {
+  // Get Stripe config (publishable key)
+  app.get("/api/stripe-config", (req, res) => {
+    res.json({
+      publishableKey: process.env.STRIPE_PUBLISHABLE_KEY || "",
+      stripeEnabled: !!stripe,
+    });
+  });
+
+  // Stripe payment routes
+  app.post("/api/create-payment-intent", requireAuth, async (req, res) => {
     try {
-      // Check if Stripe is configured
-      if (!process.env.STRIPE_SECRET_KEY) {
+      if (!stripe) {
         return res.status(400).json({
           message: "Payment processing is not configured. Please add Stripe API keys.",
         });
       }
 
-      // Stripe integration will be enabled once keys are added
-      res.status(501).json({
-        message: "Stripe integration ready. Add STRIPE_SECRET_KEY to enable payments.",
+      const { amount, description, metadata } = req.body;
+
+      if (!amount || amount <= 0) {
+        return res.status(400).json({ message: "Invalid amount" });
+      }
+
+      // Create a PaymentIntent with Stripe
+      const paymentIntent = await stripe.paymentIntents.create({
+        amount: Math.round(amount), // Amount in cents
+        currency: "usd",
+        description: description || "Campus Club Payment",
+        metadata: {
+          userId: req.session.userId!,
+          ...metadata,
+        },
+        automatic_payment_methods: {
+          enabled: true,
+        },
+      });
+
+      res.json({
+        clientSecret: paymentIntent.client_secret,
+        paymentIntentId: paymentIntent.id,
       });
     } catch (error: any) {
+      console.error("Stripe payment intent error:", error);
       res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Webhook endpoint for Stripe events
+  app.post("/api/stripe-webhook", async (req, res) => {
+    try {
+      if (!stripe) {
+        return res.status(400).json({ message: "Stripe not configured" });
+      }
+
+      const sig = req.headers["stripe-signature"];
+      if (!sig) {
+        return res.status(400).json({ message: "Missing stripe signature" });
+      }
+
+      // For now, we'll just acknowledge the webhook
+      // In production, you'd verify the signature and process events
+      const event = req.body;
+
+      console.log("Stripe webhook event:", event.type);
+
+      // Handle different event types
+      switch (event.type) {
+        case "payment_intent.succeeded":
+          const paymentIntent = event.data.object;
+          console.log("Payment succeeded:", paymentIntent.id);
+          // Update payment status in database
+          // You can use metadata to identify which dues/event payment this is for
+          break;
+
+        case "payment_intent.payment_failed":
+          console.log("Payment failed:", event.data.object.id);
+          break;
+      }
+
+      res.json({ received: true });
+    } catch (error: any) {
+      console.error("Webhook error:", error);
+      res.status(400).json({ message: error.message });
     }
   });
 

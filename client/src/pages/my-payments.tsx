@@ -2,8 +2,10 @@ import { useQuery } from "@tanstack/react-query";
 import { Card } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { DuesPayment } from "@shared/schema";
 import { CreditCard, Calendar, CheckCircle, AlertCircle } from "lucide-react";
+import { Link } from "wouter";
 
 export default function MyPayments() {
   const { data: duesPayments = [], isLoading } = useQuery<DuesPayment[]>({
@@ -131,7 +133,7 @@ export default function MyPayments() {
                     style={{ backgroundColor: "var(--panel-solid)" }}
                   >
                     <div className="flex items-center justify-between">
-                      <div>
+                      <div className="flex-1">
                         <p className="font-semibold" style={{ color: "var(--gray-12)" }}>
                           Dues Payment
                         </p>
@@ -142,13 +144,18 @@ export default function MyPayments() {
                           </span>
                         </div>
                       </div>
-                      <div className="text-right">
-                        <p className="text-lg font-bold" style={{ color: "var(--gray-12)" }}>
-                          ${((payment.amount || 0) / 100).toFixed(2)}
-                        </p>
-                        <Badge style={getStatusColor(payment.paymentStatus)}>
-                          {payment.paymentStatus}
-                        </Badge>
+                      <div className="text-right flex items-center gap-3">
+                        <div>
+                          <p className="text-lg font-bold" style={{ color: "var(--gray-12)" }}>
+                            ${((payment.amount || 0) / 100).toFixed(2)}
+                          </p>
+                          <Badge style={getStatusColor(payment.paymentStatus)}>
+                            {payment.paymentStatus}
+                          </Badge>
+                        </div>
+                        <Link href={`/dues/${payment.clubDuesId}/pay`}>
+                          <Button size="sm">Pay Now</Button>
+                        </Link>
                       </div>
                     </div>
                   </Card>

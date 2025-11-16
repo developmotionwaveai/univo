@@ -44,6 +44,7 @@ import CreateEvent from "@/pages/create-event";
 import CreateAnnouncement from "@/pages/create-announcement";
 import EventRSVP from "@/pages/event-rsvp";
 import PaymentHistory from "@/pages/payment-history";
+import PayDues from "@/pages/pay-dues";
 import { Link } from "wouter";
 import { Badge } from "@/components/ui/badge";
 
@@ -249,6 +250,18 @@ function Router() {
             component={() => (
               <DashboardLayout>
                 <EventRSVP />
+              </DashboardLayout>
+            )}
+          />
+        )}
+      </Route>
+
+      <Route path="/dues/:id/pay">
+        {() => (
+          <ProtectedRoute
+            component={() => (
+              <DashboardLayout>
+                <PayDues />
               </DashboardLayout>
             )}
           />
