@@ -1,0 +1,235 @@
+/* Root Variables and Theme */
+:root {
+  --root-container-padding: 24px;
+  --mobile-navbar-height: 60px;
+  --dashboard-sidebar-width: 260px;
+  
+  /* Color System - Gray Scale */
+  --gray-2: #f9f9fb;
+  --gray-3: #f1f1f4;
+  --gray-4: #e8e8ec;
+  --gray-5: #e0e0e4;
+  --gray-6: #d8d8dd;
+  --gray-9: #8b8d98;
+  --gray-10: #80828d;
+  --gray-11: #62636c;
+  --gray-12: #1e1f24;
+  
+  --gray-a2: rgba(0, 0, 0, 0.02);
+  --gray-a3: rgba(0, 0, 0, 0.04);
+  --gray-a4: rgba(0, 0, 0, 0.06);
+  --gray-a5: rgba(0, 0, 0, 0.08);
+  --gray-a6: rgba(0, 0, 0, 0.1);
+  --gray-a9: rgba(0, 0, 0, 0.45);
+  --gray-a10: rgba(0, 0, 0, 0.5);
+  --gray-a11: rgba(0, 0, 0, 0.62);
+  --gray-a12: rgba(0, 0, 0, 0.88);
+  
+  /* Accent Colors */
+  --accent-9: #3b82f6;
+  --accent-a3: rgba(59, 130, 246, 0.1);
+  --accent-a4: rgba(59, 130, 246, 0.15);
+  --accent-a8: rgba(59, 130, 246, 0.6);
+  
+  /* Success Colors */
+  --success-9: #10b981;
+  --success-a3: rgba(16, 185, 129, 0.1);
+  
+  /* Warning Colors */
+  --warning-a3: rgba(245, 158, 11, 0.1);
+  --warning-a11: rgba(245, 158, 11, 0.8);
+  
+  /* Danger Colors */
+  --danger-9: #ef4444;
+  --danger-9-contrast: #ffffff;
+  
+  /* Blue Colors */
+  --blue-9: #3b82f6;
+  
+  /* Panel Colors */
+  --panel-solid: #ffffff;
+  --panel-translucent: rgba(255, 255, 255, 0.8);
+  --panel-elevation-a3: rgba(0, 0, 0, 0.03);
+  
+  /* Stroke/Border Colors */
+  --stroke: rgba(0, 0, 0, 0.08);
+  
+  /* Background */
+  --background: #ffffff;
+  
+  /* Item Background */
+  --item-bg-color: transparent;
+  
+  /* Font */
+  --whop-font-inter: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+
+/* Dark Mode Overrides */
+.dark {
+  --gray-2: #111113;
+  --gray-3: #18191b;
+  --gray-4: #1f2023;
+  --gray-5: #26272b;
+  --gray-6: #2e2f33;
+  --gray-9: #70727d;
+  --gray-10: #7e8088;
+  --gray-11: #a0a1a7;
+  --gray-12: #ededef;
+  
+  --gray-a2: rgba(255, 255, 255, 0.02);
+  --gray-a3: rgba(255, 255, 255, 0.04);
+  --gray-a4: rgba(255, 255, 255, 0.06);
+  --gray-a5: rgba(255, 255, 255, 0.08);
+  --gray-a6: rgba(255, 255, 255, 0.1);
+  
+  --background: #000000;
+  --panel-solid: #18191b;
+  --panel-translucent: rgba(24, 25, 27, 0.8);
+  
+  --stroke: rgba(255, 255, 255, 0.08);
+}
+
+/* Base Styles */
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  font-family: var(--whop-font-inter);
+  background-color: var(--gray-2);
+  color: var(--gray-12);
+}
+
+/* Layout Grid */
+#dashboard-grid {
+  display: grid;
+  grid-template-columns: var(--dashboard-sidebar-width) 1fr;
+  height: 100vh;
+}
+
+#dashboard-sidebar {
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid var(--stroke);
+}
+
+#dashboard-content {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  overflow: hidden;
+}
+
+/* Typography Scale */
+.fui-r-size-1 { font-size: 12px; line-height: 16px; }
+.fui-r-size-2 { font-size: 14px; line-height: 20px; }
+.fui-r-size-3 { font-size: 16px; line-height: 24px; }
+.fui-r-size-4 { font-size: 18px; line-height: 28px; }
+.fui-r-size-5 { font-size: 20px; line-height: 28px; }
+.fui-r-size-6 { font-size: 24px; line-height: 32px; }
+
+.fui-r-weight-medium { font-weight: 500; }
+.fui-r-weight-semi-bold { font-weight: 600; }
+.fui-r-weight-bold { font-weight: 700; }
+
+/* Button Styles */
+.fui-Button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 8px 16px;
+  border-radius: 8px;
+  border: none;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  outline: none;
+}
+
+.fui-variant-solid {
+  background-color: var(--accent-9);
+  color: white;
+}
+
+.fui-variant-soft {
+  background-color: var(--gray-a3);
+  color: var(--gray-12);
+}
+
+.fui-variant-surface {
+  background-color: var(--gray-a2);
+  border: 1px solid var(--stroke);
+  color: var(--gray-12);
+}
+
+.fui-variant-ghost {
+  background-color: transparent;
+  color: var(--gray-11);
+}
+
+.fui-variant-ghost:hover {
+  background-color: var(--gray-a3);
+  color: var(--gray-12);
+}
+
+.fui-IconButton {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border-radius: 8px;
+}
+
+/* Card Styles */
+.elevated-card {
+  background-color: var(--panel-elevation-a3);
+  border: 1px solid var(--gray-a5);
+  border-radius: 16px;
+  padding: 24px;
+  box-shadow: 0px 1px 2px 0px rgba(0, 0, 0, 0.05);
+}
+
+.dark .elevated-card {
+  box-shadow: none;
+  border-color: var(--panel-elevation-a3);
+}
+
+/* Avatar Styles */
+.fui-AvatarRoot {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  user-select: none;
+  background-color: var(--gray-a3);
+}
+
+.fui-shape-circle { border-radius: 9999px; }
+.fui-shape-square { border-radius: 8px; }
+
+/* Badge Styles */
+.fui-Badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.fui-variant-surface {
+  background-color: var(--accent-a3);
+  color: var(--accent-9);
+}
+
+/* Navigation Styles */
+.GlobalSidebarNavItem {
+  display: flex;
+  align-items: center;
+  height: 48px;
+  padding: 0 12px;
+  border-radius: 12px;
+  color: var(--gray-a10);
+  ...
